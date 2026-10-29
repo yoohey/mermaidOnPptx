@@ -1,0 +1,90 @@
+name: Release
+
+# v1.2.3 のようなタグを打つと公開する。
+# - 開発用（非公開）リポジトリ: その時点のソースを1コミットにまとめ、公開用リポジトリへタグごと送る（publish-source）
+# - 公開用リポジトリ: 送られたタグで GitHub Pages に公開し、配布用マニフェストをリリースに添付する（release）
+# 公開用リポジトリはリポジトリ変数 PUBLIC_REPO（例: yoohey/mermaidOnPptx）で指定し、
+# 書き込み用トークンをシークレット PUBLIC_REPO_TOKEN に入れる
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish-source:
+    if: github.event.repository.private && vars.PUBLIC_REPO != '' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.PUBLIC_REPO }}
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          path: public
+      # 開発の履歴やコミットの作者情報は送らず、ファイルだけをそろえる
+      - name: Copy the source
+        run: |
+          rsync -a --delete --exclude .git src/ public/
+      - name: Commit and tag
+        working-directory: public
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release $GITHUB_REF_NAME" || echo "変更なし"
+          git tag "$GITHUB_REF_NAME"
+          git push origin HEAD
+          git push origin "$GITHUB_REF_NAME"
+
+  release:
+    # 公開用リポジトリでだけ動かす（非公開リポジトリの Pages は無料プランで使えないため）
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # タグ v1.2.3 と manifest.xml の <Version>1.2.3.0</Version> がずれていたら止める
+      - name: Check version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' manifest.xml)
+          if [ "$manifest" != "$tag.0" ]; then
+            echo "manifest.xml の Version ($manifest) がタグ ($tag) と合いません"; exit 1
+          fi
+      # 配信元はこのリポジトリの GitHub Pages（https://<owner>.github.io/<repo>）
+      - run: npm run build:release
+        env:
+          ADDIN_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      - run: npm run validate:release
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/manifest.xml dist/THIRD-PARTY-NOTICES.txt --generate-notes

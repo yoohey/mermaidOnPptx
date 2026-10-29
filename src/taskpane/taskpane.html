@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mermaid</title>
+    <link rel="stylesheet" href="taskpane.css" />
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Mermaid</h1>
+      <p class="hint">ノートに <code>```mermaid</code> ～ <code>```</code> を書いて、ボタンを押してください。</p>
+      <div class="buttons">
+        <button id="sync-current" disabled>このスライドの図を生成・更新</button>
+        <button id="sync-all" class="secondary" disabled>全スライドを更新</button>
+      </div>
+      <label class="option"><input type="checkbox" id="force" /> 変更が無い図も作り直す</label>
+      <label class="option">
+        テーマ
+        <select id="theme" disabled></select>
+      </label>
+      <div id="custom-colors" hidden>
+        <label class="color"><input type="color" id="color-main" /> メイン色（図形の塗りと枠）</label>
+        <label class="color"><input type="color" id="color-sub" /> サブ色（円グラフなど）</label>
+        <label class="color"><input type="color" id="color-text" /> 文字と線の色</label>
+        <button id="color-from-template" class="secondary">テンプレートの色から始める</button>
+      </div>
+      <details id="samples">
+        <summary>サンプル（ノートに貼って使う）</summary>
+        <label class="option">
+          図の種類
+          <select id="sample-select"></select>
+        </label>
+        <textarea id="sample-code" readonly rows="8" spellcheck="false"></textarea>
+        <div class="buttons">
+          <button id="sample-copy" class="secondary">コピー</button>
+        </div>
+        <p id="sample-status" class="hint"></p>
+        <div id="sample-preview"></div>
+      </details>
+      <section>
+        <h2>結果</h2>
+        <p id="summary" class="hint">まだ実行していません。</p>
+        <div id="results"></div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+body { font-family: "Yu Gothic UI", "Segoe UI", sans-serif; font-size: 13px; margin: 0; color: #222; background: #fff; }
+main { padding: 12px; }
+h1 { font-size: 16px; margin: 0 0 8px; }
+h2 { font-size: 13px; margin: 16px 0 6px; }
+h3 { font-size: 12px; margin: 12px 0 4px; color: #555; }
+.hint { color: #555; margin: 0 0 12px; }
+.buttons { display: flex; flex-direction: column; gap: 6px; }
+button { padding: 6px 10px; border: 1px solid #b7472a; background: #b7472a; color: #fff; border-radius: 4px; cursor: pointer; font: inherit; }
+button.secondary { background: #fff; color: #b7472a; }
+button:disabled { opacity: 0.5; cursor: default; }
+.option { display: block; margin-top: 8px; color: #555; }
+select { margin-left: 6px; font: inherit; }
+.item { border: 1px solid #ddd; border-radius: 4px; padding: 6px; margin-bottom: 6px; }
+.item .status { font-weight: bold; margin-right: 6px; }
+.item.error { border-color: #e0a0a0; background: #fdf3f3; }
+.item.error .status { color: #c00; }
+.item.orphan .status { color: #a60; }
+.item pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; margin: 4px 0 0; }
+.item svg { display: block; max-width: 100%; height: auto; margin-top: 4px; }
+details { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 8px; }
+summary { cursor: pointer; font-weight: bold; }
+textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0 6px; font: 11px Consolas, "BIZ UDGothic", monospace; resize: vertical; }
+#sample-status { margin: 6px 0; }
+#sample-preview svg { display: block; max-width: 100%; height: auto; }
+#custom-colors[hidden] { display: none; }
+#custom-colors { margin: 6px 0 0 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.color { display: flex; align-items: center; gap: 6px; color: #555; }
+.color input { width: 32px; height: 22px; padding: 0; border: 1px solid #ccc; background: none; }

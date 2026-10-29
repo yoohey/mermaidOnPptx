@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # legacy-peer-deps で依存が欠けていないか（npm start が起動時に読み込むモジュール）
+      - run: npm run check:tools
+      - run: npm run typecheck
+      - run: npm test
+      # 全サンプル × 全テーマをアドインと同じ設定で描画する
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:render
+      # 許可していないライセンス（GPL 系のみのもの）が含まれるとビルドが失敗する
+      - run: npm run build:release
+      - run: npm run validate
+      - run: npm run validate:release
