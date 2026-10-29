@@ -60,6 +60,11 @@ if (require.main === module) {
   );
   const siteDir = path.join(root, "site");
   for (const name of fs.readdirSync(siteDir)) {
+    // 利用ガイドの pptx などはそのまま置く
+    if (!/\.(html|css|ps1|txt)$/.test(name)) {
+      fs.copyFileSync(path.join(siteDir, name), path.join(outDir, name));
+      continue;
+    }
     const text = fillSiteTemplate(fs.readFileSync(path.join(siteDir, name), "utf8"), base);
     // Windows PowerShell 5.1 は BOM の無いスクリプトを UTF-8 として読まず、日本語が化ける
     fs.writeFileSync(path.join(outDir, name), name.endsWith(".ps1") ? "\uFEFF" + text : text);
