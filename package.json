@@ -1,6 +1,6 @@
 {
   "name": "mermaid4pptx",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "PowerPoint add-in that renders Mermaid diagrams written in slide notes",
   "license": "MIT",
