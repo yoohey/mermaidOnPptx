@@ -6,6 +6,7 @@ PowerPoint のスライドノートに書いた [Mermaid](https://mermaid.js.org
 ## 対象環境
 
 - 必須: PowerPoint for Windows（Microsoft 365）。検証基準は Version 2610 (Build 20527.20088)
+- Mac・Web 版は後回し
 
 ## ノートの書き方
 

@@ -36,6 +36,11 @@ jobs:
       - name: Copy the source
         run: |
           rsync -a --delete --exclude .git src/ public/
+          # 利用者向けの README には、開発用リポジトリの話（開発版の試し方、開発・配布の手順など）を載せない
+          owner="${PUBLIC_REPO%%/*}"
+          node src/scripts/public-readme.js public/README.md "https://${owner}.github.io/${PUBLIC_REPO#*/}"
+        env:
+          PUBLIC_REPO: ${{ vars.PUBLIC_REPO }}
       - name: Commit and tag
         working-directory: public
         run: |

@@ -25,22 +25,36 @@
   <p>PowerPoint for Windows（Microsoft 365）。Mac 版・Web 版では動作を確認していません。</p>
 
   <h2>インストール（Windows）</h2>
-  <p>アドインのファイルはこのサイトから読み込まれます。PC に入れるのは、アドインの場所を書いた設定ファイル（manifest.xml）だけです。</p>
+  <p>アドインのファイルはこのサイトから読み込まれます。PC に置くのは、アドインの場所を書いた設定ファイル（<a href="manifest.xml" download>manifest.xml</a>）だけです。
+    Microsoft の<a href="https://learn.microsoft.com/ja-jp/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins">共有フォルダーからの読み込み手順</a>に沿って、手で設定します。</p>
+
+  <h3>1. manifest.xml を共有フォルダーに置く</h3>
   <ol>
-    <li><a href="install.ps1" download>install.ps1</a> をダウンロードします</li>
-    <li>ダウンロードしたファイルを右クリック →「PowerShell で実行」します。途中で管理者の確認が出たら「はい」を選びます（manifest.xml を置くフォルダーを共有するためです）</li>
-    <li>PowerPoint を開き直し、<b>ホーム → アドイン → 詳細</b>（または「その他のアドイン」）→ <b>共有フォルダー</b> から「Mermaid on PowerPoint」を選んで「追加」します</li>
+    <li>manifest.xml を置くフォルダーを作ります（例: <code>C:\Users\&lt;ユーザー名&gt;\MermaidOnPptx</code>）。<a href="manifest.xml" download>manifest.xml</a> をダウンロードして、そこに入れます</li>
+    <li>フォルダーを右クリック →<b>プロパティ</b> →<b>共有</b>タブ →<b>共有</b>を選び、自分を追加して<b>共有</b>を選びます</li>
+    <li>表示されたネットワーク パス（<code>\\PC名\MermaidOnPptx</code> のような形）を控えて、<b>完了</b>を選びます</li>
   </ol>
-  <p>スクリプトが行うのは次の 3 つだけです。中身はテキストエディターで確認できます。</p>
-  <ul>
-    <li><code>%LOCALAPPDATA%\MermaidOnPptx\manifest</code> に <a href="manifest.xml">manifest.xml</a> を保存する</li>
-    <li>そのフォルダーを自分だけが読める共有フォルダーにする</li>
-    <li>PowerPoint の「信頼できるアドイン カタログ」にそのフォルダーを登録する（Microsoft の<a href="https://learn.microsoft.com/ja-jp/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins">共有フォルダーからの読み込み手順</a>と同じ設定です）</li>
-  </ul>
-  <p>手で設定する場合は、上のリンク先の手順で manifest.xml を共有フォルダーに置いてください。会社の PC では、管理者の設定でアドインが使えないことがあります。</p>
+
+  <h3>2. PowerPoint に共有フォルダーを登録する</h3>
+  <ol>
+    <li>PowerPoint で<b>ファイル → オプション → トラスト センター → トラスト センターの設定 → 信頼されているアドイン カタログ</b>を開きます（版によっては「セキュリティ センター」という名前です）</li>
+    <li><b>カタログの URL</b> に控えたネットワーク パスを入れて<b>カタログの追加</b>を選び、<b>メニューに表示する</b>にチェックを入れて<b>OK</b>を選びます</li>
+    <li>PowerPoint を閉じて開き直します</li>
+  </ol>
+
+  <h3>3. アドインを追加する</h3>
+  <ol>
+    <li><b>ホーム → アドイン → 詳細設定</b>（または「その他のアドイン」）→<b>共有フォルダー</b>から「Mermaid on PowerPoint」を選んで<b>追加</b>します</li>
+  </ol>
+  <p>所属する組織のポリシーなどによっては、アドインが使えない場合があります。</p>
+
+  <h3>スクリプトでまとめて設定する場合</h3>
+  <p>手順 1・2 は <a href="install.ps1" download>install.ps1</a> でもまとめて行えます。中身はテキストエディターで確認できます（manifest.xml を <code>%LOCALAPPDATA%\MermaidOnPptx\manifest</code> に保存し、そのフォルダーを自分だけが読める共有にして、信頼されているアドイン カタログに登録します）。
+    ファイルを右クリック →「PowerShell で実行」するか、PowerShell で <code>powershell -ExecutionPolicy Bypass -File install.ps1</code> を実行します。共有を作るときだけ管理者の確認が出ます。</p>
 
   <h2>アンインストール</h2>
-  <p>PowerShell で <code>install.ps1 -Uninstall</code> を実行すると、登録・共有・フォルダーを取り消します。</p>
+  <p>信頼されているアドイン カタログの登録とフォルダーの共有を外し、PowerPoint を開き直します。
+    スクリプトで設定した場合は <code>install.ps1 -Uninstall</code> で取り消せます。</p>
 
   <h2>使い方</h2>
   <p>ノートに次のように書いて、ホームタブの「図を生成」を押します。パネルの「サンプル」からコピーすることもできます。</p>
