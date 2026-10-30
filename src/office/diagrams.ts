@@ -3,36 +3,68 @@
  */
 import { TAG } from "../core/tags";
 import type { ExistingDiagram } from "../core/sync";
+import { isResized, parseBox } from "../core/layout";
 
+type ShapeTags = Record<"id" | "hash" | "theme" | "box" | "fontPt", PowerPoint.Tag>;
+
+function loadTags(shape: PowerPoint.Shape): ShapeTags {
+  const tags = {
+    id: shape.tags.getItemOrNullObject(TAG.ID),
+    hash: shape.tags.getItemOrNullObject(TAG.HASH),
+    theme: shape.tags.getItemOrNullObject(TAG.THEME),
+    box: shape.tags.getItemOrNullObject(TAG.BOX),
+    fontPt: shape.tags.getItemOrNullObject(TAG.FONT_PT),
+  };
+  Object.values(tags).forEach((t) => t.load("value"));
+  return tags;
+}
+
+const valueOf = (tag: PowerPoint.Tag) => (tag.isNullObject ? "" : tag.value);
+
+/**
+ * スライド直下の図と、スライド直下のグループの中の図を読む（グループの中のグループは見ない）。
+ * グループの図形を読む API（PowerPointApi 1.8）が無ければ、スライド直下だけを読む
+ */
 export async function readDiagrams(slideId: string): Promise<ExistingDiagram[]> {
+  const withGroups = Office.context.requirements.isSetSupported("PowerPointApi", "1.8");
   return PowerPoint.run(async (context) => {
     const shapes = context.presentation.slides.getItem(slideId).shapes;
-    shapes.load("items/id,items/left,items/top,items/width,items/height");
+    shapes.load(`items/id,items/left,items/top,items/width,items/height${withGroups ? ",items/type" : ""}`);
     await context.sync();
 
-    const withTags = shapes.items.map((shape) => {
-      const tags = {
-        id: shape.tags.getItemOrNullObject(TAG.ID),
-        hash: shape.tags.getItemOrNullObject(TAG.HASH),
-        theme: shape.tags.getItemOrNullObject(TAG.THEME),
-      };
-      Object.values(tags).forEach((t) => t.load("value"));
-      return { shape, tags };
-    });
+    const found: { shape: PowerPoint.Shape; tags: ShapeTags; groupId?: string }[] = [];
+    const groups: { groupId: string; members: PowerPoint.ShapeScopedCollection }[] = [];
+    for (const shape of shapes.items) {
+      found.push({ shape, tags: loadTags(shape) });
+      if (withGroups && shape.type === "Group") {
+        const members = shape.group.shapes;
+        members.load("items/id,items/left,items/top,items/width,items/height");
+        groups.push({ groupId: shape.id, members });
+      }
+    }
+    await context.sync();
+    for (const { groupId, members } of groups) {
+      for (const shape of members.items) found.push({ shape, tags: loadTags(shape), groupId });
+    }
     await context.sync();
 
-    return withTags
+    return found
       .filter(({ tags }) => !tags.id.isNullObject)
-      .map(({ shape, tags }) => ({
-        shapeId: shape.id,
-        blockId: tags.id.value,
-        hash: tags.hash.isNullObject ? "" : tags.hash.value,
-        theme: tags.theme.isNullObject ? "" : tags.theme.value,
-        left: shape.left,
-        top: shape.top,
-        width: shape.width,
-        height: shape.height,
-      }));
+      .map(({ shape, tags, groupId }) => {
+        const current = { width: shape.width, height: shape.height };
+        return {
+          shapeId: shape.id,
+          blockId: tags.id.value,
+          hash: valueOf(tags.hash),
+          theme: valueOf(tags.theme),
+          resized: isResized(parseBox(valueOf(tags.box)), current),
+          fontPt: Number(valueOf(tags.fontPt)) || null,
+          groupId,
+          left: shape.left,
+          top: shape.top,
+          ...current,
+        };
+      });
   });
 }
 

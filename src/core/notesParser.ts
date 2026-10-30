@@ -3,9 +3,13 @@
  * Office に依存しない純粋関数で、仕様は設計書「ノートの記法仕様」に従う。
  */
 
+import { MAX_FONT_PT, MIN_FONT_PT } from "./layout";
+
 export interface MermaidBlock {
   /** ブロックの id。`id=` 指定が無ければ出現順の "1", "2", ... */
   id: string;
+  /** `fontsize=` で指定した文字の大きさ（pt）。無ければパネルの設定を使う */
+  fontPt?: number;
   /** フェンスの内側のコード（正規化済み） */
   code: string;
   /** 開始フェンスの行番号（1 始まり、正規化後のテキスト基準） */
@@ -24,6 +28,7 @@ export interface ParseResult {
 
 const OPEN_FENCE = /^\s*(`{3,}|~{3,})\s*mermaid\b(.*)$/i;
 const ID_ATTR = /(?:^|\s)id\s*=\s*["']?([A-Za-z0-9_-]+)["']?/;
+const FONT_ATTR = /(?:^|\s)fontsize\s*=\s*["']?([^\s"']*)["']?/i;
 
 /**
  * PowerPoint の自動修正やノート特有の文字を、Mermaid が解釈できる形に戻す。
@@ -68,8 +73,16 @@ export function parseMermaidBlocks(rawText: string): ParseResult {
     }
 
     const idMatch = ID_ATTR.exec(open[2]);
+    const fontMatch = FONT_ATTR.exec(open[2]);
+    let fontPt: number | undefined;
+    if (fontMatch) {
+      const value = Number(fontMatch[1]);
+      if (fontMatch[1] !== "" && value >= MIN_FONT_PT && value <= MAX_FONT_PT) fontPt = value;
+      else errors.push({ line: startLine, message: `fontsize は ${MIN_FONT_PT}〜${MAX_FONT_PT} の数（pt）で指定してください` });
+    }
     blocks.push({
       id: idMatch ? idMatch[1] : String(blocks.length + 1),
+      ...(fontPt !== undefined ? { fontPt } : {}),
       code: lines.slice(i + 1, j).join("\n").trim(),
       line: startLine,
     });

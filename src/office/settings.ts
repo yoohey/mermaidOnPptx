@@ -10,9 +10,11 @@ import {
   type CustomColors,
   type Theme,
 } from "../core/theme";
+import { DEFAULT_FONT_PT, MAX_FONT_PT, MIN_FONT_PT } from "../core/layout";
 
 const THEME_KEY = "m4p.theme";
 const CUSTOM_COLORS_KEY = "m4p.customColors";
+const FONT_PT_KEY = "m4p.fontPt";
 
 export function getTheme(): Theme {
   const value = Office.context.document.settings.get(THEME_KEY);
@@ -36,6 +38,17 @@ export function hasCustomColors(): boolean {
 
 export function setCustomColors(colors: CustomColors): Promise<void> {
   Office.context.document.settings.set(CUSTOM_COLORS_KEY, colors);
+  return save();
+}
+
+/** 図の文字の大きさ（pt）。ブロックの fontsize= があればそちらが優先 */
+export function getFontPt(): number {
+  const value = Office.context.document.settings.get(FONT_PT_KEY);
+  return typeof value === "number" && value >= MIN_FONT_PT && value <= MAX_FONT_PT ? value : DEFAULT_FONT_PT;
+}
+
+export function setFontPt(pt: number): Promise<void> {
+  Office.context.document.settings.set(FONT_PT_KEY, pt);
   return save();
 }
 

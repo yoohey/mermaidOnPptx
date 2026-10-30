@@ -5,6 +5,7 @@
  * 非公式の slide.notesSlide は存在しなかったため使わない。
  */
 import { readPresentationInfo, sldIdFromOfficeSlideId, type SlideNotes } from "../core/pptxNotes";
+import { CancelledError, type SyncProgress } from "../core/progress";
 import type { TemplateColors } from "../core/theme";
 
 export interface CurrentSlide {
@@ -35,8 +36,15 @@ export async function getCurrentSlide(): Promise<CurrentSlide> {
   });
 }
 
-/** プレゼンテーション全体を pptx（Compressed）として取得する */
-export function readPresentationBytes(sliceSize = 4 * 1024 * 1024): Promise<Uint8Array> {
+/**
+ * プレゼンテーション全体を pptx（Compressed）として取得する。onSlice には受け取った分割数を渡す。
+ * signal で中止すると、次の分割を取りに行かずに CancelledError で終わる
+ */
+export function readPresentationBytes(
+  sliceSize = 4 * 1024 * 1024,
+  onSlice?: (done: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     Office.context.document.getFileAsync(Office.FileType.Compressed, { sliceSize }, (result) => {
       if (result.status !== Office.AsyncResultStatus.Succeeded) {
@@ -64,6 +72,10 @@ export function readPresentationBytes(sliceSize = 4 * 1024 * 1024): Promise<Uint
         });
       };
       const next = (i: number) => {
+        if (signal?.aborted) {
+          finish(new CancelledError());
+          return;
+        }
         file.getSliceAsync(i, (sliceResult) => {
           if (sliceResult.status !== Office.AsyncResultStatus.Succeeded) {
             finish(new Error(`getSliceAsync 失敗: ${sliceResult.error.message}`));
@@ -71,10 +83,12 @@ export function readPresentationBytes(sliceSize = 4 * 1024 * 1024): Promise<Uint
           }
           chunks[i] = new Uint8Array(sliceResult.value.data as number[]);
           received++;
+          onSlice?.(received, file.sliceCount);
           if (received === file.sliceCount) finish();
           else next(i + 1);
         });
       };
+      onSlice?.(0, file.sliceCount);
       next(0);
     });
   });
@@ -89,8 +103,18 @@ export interface PresentationNotes {
 }
 
 /** pptx 全体を取得し、全スライドのノートとスライドの大きさを読む */
-export async function readPresentationNotes(): Promise<PresentationNotes> {
-  const info = await readPresentationInfo(await readPresentationBytes());
+export async function readPresentationNotes(
+  onProgress?: (p: SyncProgress) => void,
+  signal?: AbortSignal,
+): Promise<PresentationNotes> {
+  const bytes = await readPresentationBytes(
+    undefined,
+    (done, total) => onProgress?.({ phase: "read", done, total }),
+    signal,
+  );
+  if (signal?.aborted) throw new CancelledError();
+  onProgress?.({ phase: "parse" });
+  const info = await readPresentationInfo(bytes);
   const bySldId = new Map<number, SlideNotes>(info.slides.map((s) => [s.sldId, s]));
   return {
     slideSize: info.slideSize,

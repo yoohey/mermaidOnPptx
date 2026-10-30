@@ -37,6 +37,23 @@ describe("planSlide", () => {
     expect(kinds(actions)).toEqual(["upToDate:a", "replace:b"]);
   });
 
+  it("ハッシュが一致していても、大きさを変えた図は置き換え", () => {
+    const actions = planSlide({ ...base, diagrams: [{ ...diagram("a", "ha"), resized: true }, diagram("b", "hb")] });
+    expect(kinds(actions)).toEqual(["replace:a", "upToDate:b"]);
+  });
+
+  it("文字の大きさの設定を変えたら置き換え。記録の無い図は置き換えない", () => {
+    const diagrams = [{ ...diagram("a", "ha"), fontPt: 14 }, diagram("b", "hb")];
+    expect(kinds(planSlide({ ...base, diagrams, fontPt: 14 }))).toEqual(["upToDate:a", "upToDate:b"]);
+    expect(kinds(planSlide({ ...base, diagrams, fontPt: 18 }))).toEqual(["replace:a", "upToDate:b"]);
+  });
+
+  it("ブロックの fontsize= はパネルの設定より優先", () => {
+    const parsed = parseMermaidBlocks("```mermaid id=a fontsize=18\ngraph TD\n```");
+    const diagrams = [{ ...diagram("a", "ha"), fontPt: 18 }];
+    expect(kinds(planSlide({ ...base, parsed, diagrams, fontPt: 14 }))).toEqual(["upToDate:a"]);
+  });
+
   it("強制再生成ならハッシュ一致でも置き換え", () => {
     const actions = planSlide({ ...base, force: true, diagrams: [diagram("a", "ha")] });
     expect(kinds(actions)).toEqual(["replace:a", "insert:b"]);

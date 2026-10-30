@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { placeNew, placeReplacing } from "../src/core/layout";
+import { boxToPx, fitScale, isResized, parseBox, formatBox, placeNew, viewBoxForBox } from "../src/core/layout";
 
 const slide = { width: 960, height: 540 };
 
 describe("placeNew", () => {
-  it("小さい図は2倍まで拡大して中央に置く", () => {
-    // 100x50px → 75x37.5pt → 2倍で 150x75pt
-    expect(placeNew({ width: 100, height: 50 }, slide)).toEqual({ left: 405, top: 233, width: 150, height: 75 });
+  it("小さい図は拡大せず、等倍で中央に置く", () => {
+    // 100x50px → 75x38pt（文字を指定の大きさで見せるため）
+    expect(placeNew({ width: 100, height: 50 }, slide)).toEqual({ left: 443, top: 251, width: 75, height: 38 });
   });
 
-  it("縦長の図は高さ（スライドの70%）に合わせる", () => {
-    // 状態遷移図の実例 98x304pt 相当 → 高さ 378pt まで
-    const r = placeNew({ width: 98 / 0.75, height: 304 / 0.75 }, slide);
+  it("縦長で高すぎる図は高さ（スライドの70%）に合わせて縮める", () => {
+    const r = placeNew({ width: 200, height: 1000 }, slide);
     expect(r.height).toBe(378);
-    expect(r.width).toBe(122);
+    expect(r.width).toBe(76);
   });
 
   it("大きい図は縦横比を保って幅80%に縮める", () => {
@@ -31,9 +30,40 @@ describe("placeNew", () => {
   });
 });
 
-describe("placeReplacing", () => {
-  it("左上と横幅を引き継ぎ、高さを新しい縦横比で決める", () => {
-    const old = { left: 10, top: 20, width: 300, height: 100 };
-    expect(placeReplacing(old, { width: 200, height: 100 })).toEqual({ left: 10, top: 20, width: 300, height: 150 });
+describe("fitScale / boxToPx", () => {
+  it("縦横比を保って枠に収める倍率は、幅と高さの小さい方で決まる", () => {
+    // 200x100px = 150x75pt を 300x300pt の枠へ → 幅で 2 倍
+    expect(fitScale({ width: 200, height: 100 }, { width: 300, height: 300 })).toBe(2);
+  });
+
+  it("枠（pt）を等倍の SVG の大きさ（px）に直す", () => {
+    expect(boxToPx({ width: 75, height: 150 })).toEqual({ width: 100, height: 200 });
+  });
+});
+
+describe("viewBoxForBox", () => {
+  it("横長の枠では左右に余白を足して中央に置く", () => {
+    expect(viewBoxForBox([0, 0, 100, 100], { width: 200, height: 100 })).toEqual([-50, 0, 200, 100]);
+  });
+
+  it("縦長の枠では上下に余白を足す", () => {
+    expect(viewBoxForBox([10, 10, 100, 50], { width: 100, height: 100 })).toEqual([10, -15, 100, 100]);
+  });
+});
+
+describe("M4P_BOX と isResized", () => {
+  it("幅と高さを文字列にして読み戻せる", () => {
+    expect(parseBox(formatBox({ width: 300, height: 150.25 }))).toEqual({ width: 300, height: 150.3 });
+    expect(parseBox("")).toBeNull();
+  });
+
+  it("1pt 以上変わっていれば大きさを変えたとみなす", () => {
+    const inserted = { width: 300, height: 150 };
+    expect(isResized(inserted, { width: 300.4, height: 150 })).toBe(false);
+    expect(isResized(inserted, { width: 300, height: 200 })).toBe(true);
+  });
+
+  it("記録の無い図（1.0 で作った図）は変えていないとみなす", () => {
+    expect(isResized(null, { width: 1, height: 1 })).toBe(false);
   });
 });

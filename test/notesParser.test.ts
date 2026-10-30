@@ -13,6 +13,21 @@ describe("parseMermaidBlocks", () => {
     expect(r.blocks.map((b) => b.id)).toEqual(["login", "2"]);
   });
 
+  it("fontsize= で文字の大きさ（pt）を指定できる", () => {
+    const r = parseMermaidBlocks("```mermaid id=a fontsize=18\ngraph TD\n```\n```mermaid fontsize=\"10.5\" id=b\ngraph LR\n```");
+    expect(r.blocks.map((b) => [b.id, b.fontPt])).toEqual([
+      ["a", 18],
+      ["b", 10.5],
+    ]);
+    expect(r.errors).toEqual([]);
+  });
+
+  it("fontsize= が範囲外や数でなければエラー", () => {
+    const r = parseMermaidBlocks("```mermaid fontsize=100\ngraph TD\n```\n```mermaid fontsize=big\ngraph LR\n```");
+    expect(r.blocks.every((b) => b.fontPt === undefined)).toBe(true);
+    expect(r.errors.map((e) => e.line)).toEqual([1, 4]);
+  });
+
   it("引用符付きの id も読む", () => {
     const r = parseMermaidBlocks('```mermaid id="a-1"\ngraph TD\n```');
     expect(r.blocks[0].id).toBe("a-1");

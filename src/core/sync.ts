@@ -12,6 +12,12 @@ export interface ExistingDiagram extends Box {
   hash: string;
   /** タグ M4P_THEME。検証版で作った図には無いので default とみなす */
   theme: string;
+  /** 挿入したあとに利用者が大きさを変えた。変えた大きさのまま作り直す */
+  resized?: boolean;
+  /** タグ M4P_FONT_PT（指定した文字の大きさ）。1.1 以前に作った図には無い */
+  fontPt?: number | null;
+  /** グループの中にある図なら、そのグループの図形 id */
+  groupId?: string;
 }
 
 export type Action =
@@ -31,9 +37,16 @@ export interface PlanInput {
   theme: string;
   /** true ならハッシュが一致していても作り直す */
   force: boolean;
+  /** パネルの「文字の大きさ」（pt）。ブロックに fontsize= があればそちらを使う */
+  fontPt?: number;
 }
 
-export function planSlide({ parsed, hashes, diagrams, theme, force }: PlanInput): Action[] {
+/** ブロックの文字の大きさ（pt）。fontsize= が無ければパネルの設定 */
+export function blockFontPt(block: MermaidBlock, panelFontPt: number): number {
+  return block.fontPt ?? panelFontPt;
+}
+
+export function planSlide({ parsed, hashes, diagrams, theme, force, fontPt }: PlanInput): Action[] {
   const actions: Action[] = [];
 
   // id が重複していると、どの図がどのブロックか決められないため、スライドごと処理しない
@@ -54,7 +67,13 @@ export function planSlide({ parsed, hashes, diagrams, theme, force }: PlanInput)
       continue;
     }
     for (const diagram of copies) {
-      const same = diagram.hash === hashes.get(block.id) && (diagram.theme || "default") === theme;
+      // 文字の大きさの記録が無い図（1.1 以前）は、文字の大きさの設定では作り直さない
+      const sameFont = diagram.fontPt == null || fontPt === undefined || diagram.fontPt === blockFontPt(block, fontPt);
+      const same =
+        diagram.hash === hashes.get(block.id) &&
+        (diagram.theme || "default") === theme &&
+        !diagram.resized &&
+        sameFont;
       actions.push(same && !force ? { kind: "upToDate", block, diagram } : { kind: "replace", block, diagram });
     }
   }

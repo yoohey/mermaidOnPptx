@@ -26,3 +26,9 @@ textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0 6p
 #custom-colors { margin: 6px 0 0 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .color { display: flex; align-items: center; gap: 6px; color: #555; }
 .color input { width: 32px; height: 22px; padding: 0; border: 1px solid #ccc; background: none; }
+.modal[hidden] { display: none; }
+.modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.35); z-index: 10; }
+.modal-box { box-sizing: border-box; width: calc(100% - 32px); max-width: 320px; padding: 16px; background: #fff; border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; gap: 10px; }
+#progress-label { margin: 0; }
+#progress-bar { display: block; width: 100%; height: 8px; accent-color: #b7472a; }
+#progress-cancel { align-self: flex-end; }

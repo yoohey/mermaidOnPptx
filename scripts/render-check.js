@@ -2,7 +2,8 @@
 /**
  * 全サンプル × 全テーマを、アドインと同じ設定で Chromium 上に描画して確かめる。
  *   node scripts/render-check.js [結果の JSON]
- * 失敗（描画エラー、foreignObject が残る、%%{init}%% が効かない）があると終了コード 1。
+ * 失敗（描画エラー、foreignObject や dominant-baseline が残る、%%{init}%% が効かない）があると終了コード 1。
+ * 枠を広げて作り直したとき、文字の大きさを変えずにどれだけ枠を埋められるかも記録する。
  * 図形の色が CSS だけで付いているか（PowerPoint 以外での表示に関係）は数を記録するだけで、失敗にはしない。
  * Chromium の場所は環境変数 CHROMIUM_PATH で指定できる。
  */
@@ -66,6 +67,25 @@ async function main() {
       results.push(row);
       if (!r.ok) failures.push(`${theme} / ${sample.id}: ${r.error}`);
       else if (r.foreignObjects > 0) failures.push(`${theme} / ${sample.id}: foreignObject が ${r.foreignObjects} 個`);
+      // PowerPoint は dominant-baseline が効かず文字が上にずれるため、dy に置き換えてあること
+      else if (/<text[^>]*dominant-baseline="(central|middle)"/.test(r.svg))
+        failures.push(`${theme} / ${sample.id}: dominant-baseline が残っている`);
+    }
+  }
+
+  // 枠を広げて作り直したとき、文字の大きさを変えずにどれだけ枠を埋められるか（記録だけ）
+  const FILL_CASES = [
+    { label: "幅2倍", w: 2, h: 1 },
+    { label: "高さ2倍", w: 1, h: 2 },
+    { label: "幅高さ2倍", w: 2, h: 2 },
+    { label: "0.7倍", w: 0.7, h: 0.7 },
+  ];
+  const fills = [];
+  for (const sample of samples) {
+    for (const c of FILL_CASES) {
+      const r = await page.evaluate(([code, w, h]) => window.m4pFill(code, w, h), [sample.code, c.w, c.h]);
+      fills.push({ sample: sample.id, case: c.label, ...r });
+      if (!r.ok) failures.push(`${sample.id} / ${c.label}: ${r.error}`);
     }
   }
 
@@ -82,7 +102,14 @@ async function main() {
       `${r.theme.padEnd(10)} ${r.sample.padEnd(9)} ${String(r.ms).padStart(5)} ${String(r.bytes ?? "-").padStart(7)}  ${color}${r.ok ? "" : "  ERROR"}`,
     );
   }
-  if (process.argv[2]) fs.writeFileSync(process.argv[2], JSON.stringify({ results, init: { ...init, svg: undefined } }, null, 2));
+  console.log("\nsample     枠          幅を埋めた  高さを埋めた  文字の縮小");
+  const pct = (v) => `${Math.round(v * 100)}%`.padStart(6);
+  for (const r of fills) {
+    const v = r.ok ? `${pct(r.fillW)}      ${pct(r.fillH)}        ${pct(r.shrink)}` : "ERROR";
+    console.log(`${r.sample.padEnd(10)} ${r.case.padEnd(10)} ${v}`);
+  }
+  if (process.argv[2])
+    fs.writeFileSync(process.argv[2], JSON.stringify({ results, fills, init: { ...init, svg: undefined } }, null, 2));
 
   if (failures.length > 0) {
     console.error(`\n失敗 ${failures.length} 件:\n` + failures.map((f) => "  " + f).join("\n"));

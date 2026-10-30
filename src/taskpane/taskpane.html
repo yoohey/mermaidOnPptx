@@ -20,6 +20,10 @@
         テーマ
         <select id="theme" disabled></select>
       </label>
+      <label class="option">
+        文字の大きさ
+        <select id="font-pt" disabled></select>
+      </label>
       <div id="custom-colors" hidden>
         <label class="color"><input type="color" id="color-main" /> メイン色（図形の塗りと枠）</label>
         <label class="color"><input type="color" id="color-sub" /> サブ色（円グラフなど）</label>
@@ -45,5 +49,12 @@
         <div id="results"></div>
       </section>
     </main>
+    <div id="progress" class="modal" role="dialog" aria-modal="true" aria-labelledby="progress-label" hidden>
+      <div class="modal-box">
+        <p id="progress-label"></p>
+        <progress id="progress-bar" max="1"></progress>
+        <button id="progress-cancel" class="secondary">キャンセル</button>
+      </div>
+    </div>
   </body>
 </html>
