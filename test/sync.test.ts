@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { notesLineOfError, planSlide, type ExistingDiagram } from "../src/core/sync";
+import { layoutFontPt, notesLineOfError, planSlide, type ExistingDiagram } from "../src/core/sync";
 import { parseMermaidBlocks } from "../src/core/notesParser";
 
 const box = { left: 0, top: 0, width: 100, height: 100 };
@@ -100,5 +100,32 @@ describe("notesLineOfError", () => {
     const block = { id: "a", code: "graph TD\n  A-->", line: 5 };
     expect(notesLineOfError(block, "Parse error on line 2:\n...")).toBe(7);
     expect(notesLineOfError(block, "No diagram type detected")).toBe(5);
+  });
+});
+
+describe("layoutFontPt", () => {
+  const d = (extra: Partial<ExistingDiagram>): ExistingDiagram => ({
+    shapeId: "s",
+    blockId: "a",
+    hash: "h",
+    theme: "",
+    left: 0,
+    top: 0,
+    width: 100,
+    height: 100,
+    ...extra,
+  });
+
+  it("新しい図は指定の文字の大きさで配置する", () => {
+    expect(layoutFontPt(null, 18)).toBe(18);
+  });
+
+  it("既にある図は、最初に入れたときの大きさで配置し、文字の大きさを変えても図形を変えない", () => {
+    expect(layoutFontPt(d({ layoutPt: 14, fontPt: 24 }), 24)).toBe(14);
+  });
+
+  it("1.2 以前の図は記録された文字の大きさ、記録が無ければ指定の大きさで配置する", () => {
+    expect(layoutFontPt(d({ fontPt: 12 }), 24)).toBe(12);
+    expect(layoutFontPt(d({}), 24)).toBe(24);
   });
 });

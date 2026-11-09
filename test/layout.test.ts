@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxToPx, fitScale, isResized, parseBox, formatBox, placeNew, viewBoxForBox } from "../src/core/layout";
+import { boxToPx, fitScale, isResized, parseBox, formatBox, placeNew } from "../src/core/layout";
 
 const slide = { width: 960, height: 540 };
 
@@ -38,16 +38,6 @@ describe("fitScale / boxToPx", () => {
 
   it("枠（pt）を等倍の SVG の大きさ（px）に直す", () => {
     expect(boxToPx({ width: 75, height: 150 })).toEqual({ width: 100, height: 200 });
-  });
-});
-
-describe("viewBoxForBox", () => {
-  it("横長の枠では左右に余白を足して中央に置く", () => {
-    expect(viewBoxForBox([0, 0, 100, 100], { width: 200, height: 100 })).toEqual([-50, 0, 200, 100]);
-  });
-
-  it("縦長の枠では上下に余白を足す", () => {
-    expect(viewBoxForBox([10, 10, 100, 50], { width: 100, height: 100 })).toEqual([10, -15, 100, 100]);
   });
 });
 

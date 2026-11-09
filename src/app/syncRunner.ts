@@ -3,9 +3,8 @@
  */
 import { parseMermaidBlocks } from "../core/notesParser";
 import { sourceHash } from "../core/hash";
-import { boxToPx, fitScale, placeNew, type Box } from "../core/layout";
-import { renderToFill, type Spacing } from "../core/spacing";
-import { blockFontPt, notesLineOfError, planSlide } from "../core/sync";
+import { fitScale, placeNew, type Box } from "../core/layout";
+import { blockFontPt, layoutFontPt, notesLineOfError, planSlide } from "../core/sync";
 import { getCurrentSlide, getSlideIds, readPresentationNotes, type CurrentSlide } from "../office/notesSource";
 import { readDiagrams } from "../office/diagrams";
 import { renderMermaid, svgForBox, MERMAID_VERSION, type RenderedSvg } from "../office/renderer";
@@ -77,9 +76,9 @@ async function syncSlide(
   const items: ItemReport[] = [];
   // 同じ id の図が複数ある（コピーした）ときは、同じ設定での描画は1回だけにする
   const renders = new Map<string, Promise<RenderedSvg>>();
-  const renderAt = (id: string, code: string, fontPt: number, spacing?: Spacing) => {
-    const cacheKey = JSON.stringify([id, fontPt, spacing ?? null]);
-    if (!renders.has(cacheKey)) renders.set(cacheKey, renderMermaid(code, theme, palette, { fontPt, spacing }));
+  const renderAt = (id: string, code: string, fontPt: number) => {
+    const cacheKey = JSON.stringify([id, fontPt]);
+    if (!renders.has(cacheKey)) renders.set(cacheKey, renderMermaid(code, theme, palette, { fontPt }));
     return renders.get(cacheKey)!;
   };
   const reportedErrors = new Set<string>();
@@ -101,17 +100,18 @@ async function syncSlide(
     const { block } = action;
     const slot = action.kind === "insert" ? newIndex++ : 0;
     const fontPt = blockFontPt(block, panelFontPt);
+    // 箱や線は、最初に入れたときの文字の大きさで配置する。文字の大きさを変えても図形の大きさは変わらず、文字だけ変わる
+    const layoutPt = layoutFontPt(action.kind === "replace" ? action.diagram : null, fontPt);
     let rendered: RenderedSvg;
     let box: Box;
     try {
+      // 新規挿入も置き換えも同じ描き方にする。置き換えでは、利用者が変えたかもしれない位置と大きさをそのまま使い、
+      // 図形はその枠に引き伸ばし、文字だけ歪めずに描き直す（svgForBox）。何も変えずに作り直せば同じ図になる
+      rendered = await renderAt(block.id, block.code, layoutPt);
       if (action.kind === "replace") {
-        // 置き換えでは、利用者が変えたかもしれない位置と大きさをそのまま使い、
-        // 文字の大きさは変えずに間隔を広げて、図を枠いっぱいに描く
         const { left, top, width, height } = action.diagram;
         box = { left, top, width, height };
-        rendered = (await renderToFill(block.code, (sp) => renderAt(block.id, block.code, fontPt, sp), boxToPx(box))).rendered;
       } else {
-        rendered = await renderAt(block.id, block.code, fontPt);
         box = placeNew(rendered, slideSize, slot, newCount);
       }
     } catch (e) {
@@ -130,9 +130,10 @@ async function syncSlide(
         hash: hashes.get(block.id)!,
         theme: key,
         mermaidVersion: MERMAID_VERSION,
-        svg: svgForBox(rendered, box),
+        svg: svgForBox(rendered, box, fontPt / layoutPt),
         box,
         fontPt,
+        layoutPt,
         // 図が枠に収まらず縮めたときは、指定より小さく見える
         textPt: fontPt * Math.min(1, fitScale(rendered, box)),
       };

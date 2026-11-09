@@ -5,7 +5,7 @@ import { TAG } from "../core/tags";
 import type { ExistingDiagram } from "../core/sync";
 import { isResized, parseBox } from "../core/layout";
 
-type ShapeTags = Record<"id" | "hash" | "theme" | "box" | "fontPt", PowerPoint.Tag>;
+type ShapeTags = Record<"id" | "hash" | "theme" | "box" | "fontPt" | "layoutPt", PowerPoint.Tag>;
 
 function loadTags(shape: PowerPoint.Shape): ShapeTags {
   const tags = {
@@ -14,6 +14,7 @@ function loadTags(shape: PowerPoint.Shape): ShapeTags {
     theme: shape.tags.getItemOrNullObject(TAG.THEME),
     box: shape.tags.getItemOrNullObject(TAG.BOX),
     fontPt: shape.tags.getItemOrNullObject(TAG.FONT_PT),
+    layoutPt: shape.tags.getItemOrNullObject(TAG.LAYOUT_PT),
   };
   Object.values(tags).forEach((t) => t.load("value"));
   return tags;
@@ -59,6 +60,7 @@ export async function readDiagrams(slideId: string): Promise<ExistingDiagram[]> 
           theme: valueOf(tags.theme),
           resized: isResized(parseBox(valueOf(tags.box)), current),
           fontPt: Number(valueOf(tags.fontPt)) || null,
+          layoutPt: Number(valueOf(tags.layoutPt)) || null,
           groupId,
           left: shape.left,
           top: shape.top,

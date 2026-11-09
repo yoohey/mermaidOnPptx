@@ -20,7 +20,7 @@ export const PX_TO_PT = 0.75;
 
 /**
  * 新規の図を置く位置を決める。count 個の新しい図を横に並べ、index 番目の枠に収める。
- * 文字を指定の大きさで見せるため拡大はせず、枠より大きい図だけ縮める。広げたいときは図の枠を広げて作り直す。
+ * 文字を指定の大きさで見せるため拡大はせず、枠より大きい図だけ縮める。広げたいときは図の枠を広げて作り直す（svgForBox）。
  */
 export function placeNew(natural: Size, slide: Size, index = 0, count = 1): Box {
   const cellW = (slide.width * MAX_W_RATIO) / count;
@@ -39,7 +39,7 @@ export function placeNew(natural: Size, slide: Size, index = 0, count = 1): Box 
   };
 }
 
-/** 縦横比を保って box に収めたときの倍率（等倍 = 1）。余りは余白になる */
+/** 縦横比を保って box に収めたときの倍率（等倍 = 1）。文字はこの倍率（1 を超えるときは 1）で描く */
 export function fitScale(natural: Size, box: Size): number {
   return Math.min(box.width / (natural.width * PX_TO_PT), box.height / (natural.height * PX_TO_PT));
 }
@@ -54,21 +54,6 @@ export const MAX_FONT_PT = 72;
 /** 枠（pt）を、等倍で描いたときの SVG の大きさ（px）に直す */
 export function boxToPx(box: Size): Size {
   return { width: box.width / PX_TO_PT, height: box.height / PX_TO_PT };
-}
-
-/**
- * viewBox を box の縦横比まで広げ、図が中央に来るようにする。
- * PowerPoint に box の大きさで挿入しても図が歪まず、余りは余白になる。
- */
-export function viewBoxForBox(viewBox: [number, number, number, number], box: Size): [number, number, number, number] {
-  const [x, y, w, h] = viewBox;
-  const boxRatio = box.width / box.height;
-  if (w / h < boxRatio) {
-    const newW = h * boxRatio;
-    return [x - (newW - w) / 2, y, newW, h];
-  }
-  const newH = w / boxRatio;
-  return [x, y - (newH - h) / 2, w, newH];
 }
 
 /** タグ M4P_BOX の値（挿入したときの幅と高さ、pt） */

@@ -1,9 +1,9 @@
 /**
  * 描画チェック（scripts/render-check.js）用のページ。アドインと同じ renderMermaid で描き、結果を返す。
  */
-import { renderMermaid } from "../../src/office/renderer";
-import { renderToFill, shrinkToFit } from "../../src/core/spacing";
+import { renderMermaid, svgForBox } from "../../src/office/renderer";
 import { SAMPLES } from "../../src/core/samples";
+import { PX_TO_PT, placeNew } from "../../src/core/layout";
 import { DEFAULT_CUSTOM_COLORS, THEMES, paletteFor, type TemplateColors, type Theme } from "../../src/core/theme";
 
 /** Office の既定テーマ（Office 2013-2022）の配色。「テンプレートの色」の確認に使う */
@@ -53,29 +53,146 @@ async function render(code: string, theme: Theme): Promise<RenderResult> {
   }
 }
 
-export interface FillResult {
-  ok: boolean;
-  error?: string;
-  /** 枠の幅・高さのうち図が埋めた割合と、枠に収めるため縮めた倍率 */
-  fillW?: number;
-  fillH?: number;
-  shrink?: number;
+const MODERN: Theme = "modern";
+const FONT_PT = 14;
+const renderModern = (code: string) =>
+  renderMermaid(code, MODERN, paletteFor(MODERN, OFFICE_COLORS, DEFAULT_CUSTOM_COLORS), { fontPt: FONT_PT });
+/**
+ * 図の大きさに関わる部分（SVG の大きさ・図全体の伸ばし方・文字の打ち消し方）。
+ * mermaid は描くたびに id や線の細かな曲がり方が変わるので、SVG の文字列全体では比べない
+ */
+function sizeSignature(svgText: string): string {
+  const svg = new DOMParser().parseFromString(svgText, "image/svg+xml").documentElement;
+  const root = ["width", "height", "viewBox"].map((a) => svg.getAttribute(a));
+  const stretchG = svg.firstElementChild?.getAttribute("transform");
+  const texts = Array.from(svg.querySelectorAll("text")).map((t) => t.getAttribute("transform"));
+  return JSON.stringify([root, stretchG, texts]);
 }
 
-/** 等倍の大きさから、枠の幅を widthRatio 倍・高さを heightRatio 倍に変えて作り直したときに、どれだけ埋まるか */
-async function fill(code: string, widthRatio: number, heightRatio: number): Promise<FillResult> {
+export interface RoundTripResult {
+  ok: boolean;
+  error?: string;
+  /** 新規挿入した図と、何も変えずに作り直した図が同じか */
+  same?: boolean;
+  /** 違ったときの最初の差（前後 80 文字） */
+  diff?: string[];
+}
+
+/** 新規挿入（placeNew）したあと、同じ枠のまま作り直すと同じ図になるか。スライドは 16:9（960x540pt） */
+async function roundTrip(code: string): Promise<RoundTripResult> {
   try {
-    const theme: Theme = "modern";
-    const palette = paletteFor(theme, OFFICE_COLORS, DEFAULT_CUSTOM_COLORS);
-    const fontPt = 14;
-    const first = await renderMermaid(code, theme, palette, { fontPt });
-    const target = { width: first.width * widthRatio, height: first.height * heightRatio };
-    const { rendered } = await renderToFill(code, (spacing) => renderMermaid(code, theme, palette, { fontPt, spacing }), target);
-    const s = shrinkToFit(rendered, target);
-    return { ok: true, fillW: (rendered.width * s) / target.width, fillH: (rendered.height * s) / target.height, shrink: s };
+    const first = await renderModern(code);
+    const box = placeNew(first, { width: 960, height: 540 });
+    const inserted = svgForBox(first, box);
+    const replaced = svgForBox(await renderModern(code), box);
+    const a = sizeSignature(inserted);
+    const b = sizeSignature(replaced);
+    if (a === b) return { ok: true, same: true };
+    let i = 0;
+    while (a[i] === b[i]) i++;
+    return { ok: true, same: false, diff: [a.slice(i - 40, i + 80), b.slice(i - 40, i + 80)] };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
-Object.assign(window, { m4pFill: fill, m4pRender: render, m4pSamples: SAMPLES, m4pThemes: THEMES });
+export interface StretchResult {
+  ok: boolean;
+  error?: string;
+  /** 伸ばした図の文字の高さ ÷ 等倍の文字の高さ（中央値）。期待値は縦横の倍率の小さい方（1 が上限） */
+  textScale?: number;
+  expected?: number;
+  /** 図が枠の幅・高さを占める割合の、等倍のときに対する比（1 なら枠いっぱいに伸びている） */
+  fillW?: number;
+  fillH?: number;
+}
+
+function medianTextHeight(svg: SVGSVGElement): number {
+  const hs = Array.from(svg.querySelectorAll("text"))
+    .map((t) => t.getBoundingClientRect().height)
+    .filter((h) => h > 0)
+    .sort((a, b) => a - b);
+  return hs.length ? hs[Math.floor(hs.length / 2)] : 0;
+}
+
+/** 図形（文字を除く）が占める範囲（viewBox の幅・高さに対する割合） */
+function contentRatio(svg: SVGSVGElement): { w: number; h: number } {
+  const texts = Array.from(svg.querySelectorAll<SVGTextElement>("text"));
+  texts.forEach((t) => (t.style.display = "none"));
+  const bb = svg.getBBox();
+  texts.forEach((t) => (t.style.display = ""));
+  const vb = svg.viewBox.baseVal;
+  return { w: bb.width / vb.width, h: bb.height / vb.height };
+}
+
+/** 等倍の枠を幅 widthRatio 倍・高さ heightRatio 倍にして作り直したとき、図形は枠に伸び、文字は歪まないか */
+async function stretch(code: string, widthRatio: number, heightRatio: number): Promise<StretchResult> {
+  try {
+    const r = await renderModern(code);
+    const box = { width: r.width * PX_TO_PT * widthRatio, height: r.height * PX_TO_PT * heightRatio };
+    const holder = document.createElement("div");
+    holder.style.cssText = "position:absolute;left:0;top:0;";
+    document.body.appendChild(holder);
+    try {
+      holder.innerHTML = r.svg;
+      const natural = holder.querySelector("svg")!;
+      const naturalText = medianTextHeight(natural);
+      const naturalFill = contentRatio(natural);
+      holder.innerHTML = svgForBox(r, box);
+      const svg = holder.querySelector("svg")!;
+      const fill = contentRatio(svg);
+      return {
+        ok: true,
+        textScale: naturalText > 0 ? medianTextHeight(svg) / naturalText : 1,
+        expected: Math.min(1, widthRatio, heightRatio),
+        // 等倍のときと同じ割合なら、図形が枠いっぱいに伸びている
+        fillW: fill.w / naturalFill.w,
+        fillH: fill.h / naturalFill.h,
+      };
+    } finally {
+      holder.remove();
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export interface FontChangeResult {
+  ok: boolean;
+  error?: string;
+  /** 図形の伸ばし方と SVG の大きさが、文字の大きさを変える前と同じか */
+  sameShapes?: boolean;
+  /** 変えたあとの文字の高さ ÷ 変える前の文字の高さ（中央値） */
+  textScale?: number;
+}
+
+/** 入れたあとに文字の大きさを 14pt から toPt に変えて作り直すと、図形はそのままで文字だけ変わるか */
+async function fontChange(code: string, toPt: number): Promise<FontChangeResult> {
+  try {
+    const r = await renderModern(code);
+    const box = placeNew(r, { width: 960, height: 540 });
+    const before = svgForBox(r, box);
+    const after = svgForBox(await renderModern(code), box, toPt / FONT_PT);
+    const shapes = (svg: string) => JSON.parse(sizeSignature(svg)).slice(0, 2);
+    const holder = document.createElement("div");
+    holder.style.cssText = "position:absolute;left:0;top:0;";
+    document.body.appendChild(holder);
+    try {
+      holder.innerHTML = before;
+      const a = medianTextHeight(holder.querySelector("svg")!);
+      holder.innerHTML = after;
+      const b = medianTextHeight(holder.querySelector("svg")!);
+      return {
+        ok: true,
+        sameShapes: JSON.stringify(shapes(before)) === JSON.stringify(shapes(after)),
+        textScale: a > 0 ? b / a : toPt / FONT_PT,
+      };
+    } finally {
+      holder.remove();
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+Object.assign(window, { m4pFontChange: fontChange, m4pRoundTrip: roundTrip, m4pStretch: stretch, m4pRender: render, m4pSamples: SAMPLES, m4pThemes: THEMES });

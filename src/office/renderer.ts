@@ -5,8 +5,7 @@
  */
 import mermaid from "mermaid";
 import { mermaidThemeConfig, themeKey, type TemplateColors, type Theme } from "../core/theme";
-import { DEFAULT_FONT_PT, PX_TO_PT, viewBoxForBox, type Size } from "../core/layout";
-import { baseSpacing, spacingConfig, type Spacing } from "../core/spacing";
+import { DEFAULT_FONT_PT, PX_TO_PT, boxToPx, type Size } from "../core/layout";
 
 declare const __MERMAID_VERSION__: string;
 
@@ -17,15 +16,15 @@ const FONT_FAMILY = '"Yu Gothic UI", "Yu Gothic", Meiryo, "Segoe UI", sans-serif
 
 /**
  * ガントの設定。既定（文字 14px、幅 800px、棒 24px）を、指定の文字の大きさに比例して大きくする。
- * 幅を文字に比例させないと、日付の目盛りが重なる。widthScale / barScale は枠いっぱいに広げるときの倍率
+ * 幅を文字に比例させないと、日付の目盛りが重なる
  */
-function ganttConfig(fontPx: number, scales: Record<string, number> = {}) {
+function ganttConfig(fontPx: number) {
   const k = fontPx / 14;
   return {
     fontSize: fontPx,
     sectionFontSize: fontPx,
-    useWidth: Math.round(800 * k * (scales.widthScale ?? 1)),
-    barHeight: Math.round(24 * k * (scales.barScale ?? 1)),
+    useWidth: Math.round(800 * k),
+    barHeight: Math.round(24 * k),
     barGap: Math.round(4 * k),
     leftPadding: Math.round(75 * k),
     rightPadding: Math.round(75 * k),
@@ -43,8 +42,6 @@ function fixGanttAxis(svg: Element, fontPx: number) {
 export interface RenderOptions {
   /** 文字の大きさ（pt）。等倍で挿入したときにこの大きさに見えるよう、mermaid には px で渡す */
   fontPt: number;
-  /** 間隔の設定（spacing.ts）。省略すると mermaid の既定 */
-  spacing?: Spacing;
 }
 
 /** 独自スタイルでは themeVariables 側のフォント指定が優先されるため、そちらにも入れる */
@@ -65,9 +62,8 @@ function withFont(config: ReturnType<typeof mermaidThemeConfig>, fontPx: number)
 
 let initializedKey: string | null = null;
 
-function ensureInitialized(theme: Theme, colors: TemplateColors | null, code: string, options: RenderOptions) {
-  const spacing = spacingConfig(code, options.spacing ?? baseSpacing(code));
-  const key = JSON.stringify([themeKey(theme, colors), options.fontPt, spacing]);
+function ensureInitialized(theme: Theme, colors: TemplateColors | null, options: RenderOptions) {
+  const key = JSON.stringify([themeKey(theme, colors), options.fontPt]);
   if (initializedKey === key) return;
   const fontPx = options.fontPt / PX_TO_PT;
   // ブロック先頭の %%{init: {"theme": ...}}%% は、ここで指定した theme より優先される（mermaid の仕様）
@@ -78,14 +74,13 @@ function ensureInitialized(theme: Theme, colors: TemplateColors | null, code: st
     fontFamily: FONT_FAMILY,
     fontSize: fontPx,
     htmlLabels: false,
-    flowchart: { htmlLabels: false, ...spacing.flowchart },
-    class: { htmlLabels: false, ...spacing.class },
-    state: { htmlLabels: false, ...spacing.state },
-    er: { ...spacing.er },
+    flowchart: { htmlLabels: false },
+    class: { htmlLabels: false },
+    state: { htmlLabels: false },
     // シーケンス図は themeVariables の文字の大きさが効かないため、個別に指定する
-    sequence: { actorFontSize: fontPx, messageFontSize: fontPx, noteFontSize: fontPx, ...spacing.sequence },
+    sequence: { actorFontSize: fontPx, messageFontSize: fontPx, noteFontSize: fontPx },
     // ガントは既定だとパネルの幅に合わせて描かれ、文字も小さい。幅を固定して読める大きさにする
-    gantt: ganttConfig(fontPx, spacing.gantt),
+    gantt: ganttConfig(fontPx),
   } as Parameters<typeof mermaid.initialize>[0]);
   initializedKey = key;
 }
@@ -109,7 +104,7 @@ export async function renderMermaid(
   colors: TemplateColors | null = null,
   options: RenderOptions = { fontPt: DEFAULT_FONT_PT },
 ): Promise<RenderedSvg> {
-  ensureInitialized(theme, colors, code, options);
+  ensureInitialized(theme, colors, options);
   // 構文エラーはここで「Parse error on line N」のようなメッセージとして投げられる
   await mermaid.parse(code);
   const { svg } = await mermaid.render(`m4p-${Date.now()}-${seq++}`, code);
@@ -148,32 +143,69 @@ function textHeightOf(svg: SVGSVGElement): number {
   return heights.length > 0 ? heights[Math.floor(heights.length / 2)] : 0;
 }
 
-/**
- * 色の書き写しと文字の高さの計測をする。どちらも画面に置いた要素でしか計算できないため、見えない場所に一時的に置く
- */
-function finishInDom(svgText: string): { svg: string; textHeight: number } {
+/** SVG を見えない場所に一時的に置いて fn を呼ぶ。計算済みスタイルや getBBox は画面に置いた要素でしか得られないため */
+function inDom<T>(svgText: string, fn: (svg: SVGSVGElement) => T): T {
   const holder = document.createElement("div");
   holder.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden;";
   holder.innerHTML = svgText;
   document.body.appendChild(holder);
   try {
-    const svg = holder.querySelector("svg")!;
-    inlineColors(svg);
-    return { svg: new XMLSerializer().serializeToString(svg), textHeight: textHeightOf(svg) };
+    return fn(holder.querySelector("svg")!);
   } finally {
     holder.remove();
   }
 }
 
-/** box の縦横比に合わせて余白を足した SVG を返す。PowerPoint は SVG を挿入時の枠いっぱいに引き伸ばすため */
-export function svgForBox(rendered: RenderedSvg, box: Size): string {
-  const doc = new DOMParser().parseFromString(rendered.svg, "image/svg+xml");
-  const svg = doc.documentElement;
-  const viewBox = viewBoxForBox(rendered.viewBox, box);
-  svg.setAttribute("viewBox", viewBox.join(" "));
-  svg.setAttribute("width", String(Math.ceil(viewBox[2])));
-  svg.setAttribute("height", String(Math.ceil(viewBox[3])));
-  return new XMLSerializer().serializeToString(svg);
+/** 色の書き写しと文字の高さの計測をする */
+function finishInDom(svgText: string): { svg: string; textHeight: number } {
+  return inDom(svgText, (svg) => {
+    inlineColors(svg);
+    return { svg: new XMLSerializer().serializeToString(svg), textHeight: textHeightOf(svg) };
+  });
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const num = (v: number) => String(+v.toFixed(4));
+
+/**
+ * 図を box（pt）の大きさに合わせる。箱・線などの図形は枠に合わせて縦横別々に伸び縮みし
+ * （PowerPoint で図の大きさを変えたときと同じ形）、文字だけは歪めずに描き直す。
+ * 文字の倍率は縦横の倍率の小さい方（1 を超えるときは 1 = 指定の大きさ）なので、伸びた箱からはみ出さない。
+ * 新規挿入では枠が図と同じ縦横比のため、図全体を同じ倍率にしたものと同じになる。
+ * 同じソース・同じ枠なら、何度作り直しても同じ図になる。
+ * textScale は、描いたときの文字の大きさに対する、指定の文字の大きさの比。図形はそのままで、文字だけこの倍率にする
+ * （文字の大きさを変えても図形の大きさを変えないため。文字を大きくすると箱からはみ出すことがある）
+ */
+export function svgForBox(rendered: RenderedSvg, box: Size, textScale = 1): string {
+  const px = boxToPx(box);
+  const [x, y, w, h] = rendered.viewBox;
+  const sx = px.width / w;
+  const sy = px.height / h;
+  const t = Math.min(1, sx, sy) * textScale;
+  return inDom(rendered.svg, (svg) => {
+    // 文字の位置（左寄せは左端、中央寄せは中央、右寄せは右端と、縦の中央）を動かさずに、伸ばした分を打ち消す
+    // 縦横を同じ倍率で縮めるだけ（新規挿入など）なら、文字も図と一緒に縮めればよい
+    const distorted = Math.abs(t / sx - 1) > 1e-4 || Math.abs(t / sy - 1) > 1e-4;
+    for (const text of distorted ? Array.from(svg.querySelectorAll<SVGTextElement>("text")) : []) {
+      if (text.closest("defs, marker, mask, clipPath, pattern")) continue;
+      const bb = text.getBBox();
+      if (bb.width === 0 && bb.height === 0) continue;
+      const anchor = text.getAttribute("text-anchor") || getComputedStyle(text).getPropertyValue("text-anchor");
+      const fx = anchor === "start" ? bb.x : anchor === "end" ? bb.x + bb.width : bb.x + bb.width / 2;
+      const fy = bb.y + bb.height / 2;
+      const counter = `translate(${num(fx)} ${num(fy)}) scale(${num(t / sx)} ${num(t / sy)}) translate(${num(-fx)} ${num(-fy)})`;
+      text.setAttribute("transform", [text.getAttribute("transform"), counter].filter(Boolean).join(" "));
+    }
+    // 図全体を枠の大きさ（px）に伸ばす
+    const g = document.createElementNS(SVG_NS, "g");
+    g.setAttribute("transform", `scale(${num(sx)} ${num(sy)}) translate(${num(-x)} ${num(-y)})`);
+    while (svg.firstChild) g.appendChild(svg.firstChild);
+    svg.appendChild(g);
+    svg.setAttribute("viewBox", `0 0 ${num(px.width)} ${num(px.height)}`);
+    svg.setAttribute("width", String(Math.ceil(px.width)));
+    svg.setAttribute("height", String(Math.ceil(px.height)));
+    return new XMLSerializer().serializeToString(svg);
+  });
 }
 
 /**

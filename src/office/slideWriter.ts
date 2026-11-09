@@ -16,6 +16,8 @@ export interface WriteRequest {
   box: Box;
   /** 指定した文字の大きさ（pt） */
   fontPt: number;
+  /** 箱や線の配置を決めた文字の大きさ（pt） */
+  layoutPt: number;
   /** スライド上での実際の文字の大きさ（pt） */
   textPt: number;
 }
@@ -84,6 +86,7 @@ export async function insertDiagram(req: WriteRequest): Promise<string> {
       [TAG.THEME]: req.theme,
       [TAG.BOX]: formatBox(req.box),
       [TAG.FONT_PT]: String(req.fontPt),
+      [TAG.LAYOUT_PT]: String(req.layoutPt),
       [TAG.TEXT_PT]: req.textPt.toFixed(1),
     };
     for (const [key, value] of Object.entries(tags)) shape.tags.add(key, value);

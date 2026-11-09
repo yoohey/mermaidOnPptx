@@ -16,6 +16,8 @@ export interface ExistingDiagram extends Box {
   resized?: boolean;
   /** タグ M4P_FONT_PT（指定した文字の大きさ）。1.1 以前に作った図には無い */
   fontPt?: number | null;
+  /** タグ M4P_LAYOUT_PT（箱や線の配置を決めた文字の大きさ）。1.2 以前に作った図には無い */
+  layoutPt?: number | null;
   /** グループの中にある図なら、そのグループの図形 id */
   groupId?: string;
 }
@@ -39,6 +41,14 @@ export interface PlanInput {
   force: boolean;
   /** パネルの「文字の大きさ」（pt）。ブロックに fontsize= があればそちらを使う */
   fontPt?: number;
+}
+
+/**
+ * 箱や線の配置を決める文字の大きさ（pt）。既にある図は、最初に入れたときの大きさのまま変えない
+ * （1.2 以前の図は、記録された文字の大きさで配置されている）。新しい図は文字の大きさと同じ
+ */
+export function layoutFontPt(diagram: ExistingDiagram | null, fontPt: number): number {
+  return diagram?.layoutPt ?? diagram?.fontPt ?? fontPt;
 }
 
 /** ブロックの文字の大きさ（pt）。fontsize= が無ければパネルの設定 */

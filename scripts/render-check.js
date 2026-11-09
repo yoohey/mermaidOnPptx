@@ -3,7 +3,7 @@
  * 全サンプル × 全テーマを、アドインと同じ設定で Chromium 上に描画して確かめる。
  *   node scripts/render-check.js [結果の JSON]
  * 失敗（描画エラー、foreignObject や dominant-baseline が残る、%%{init}%% が効かない）があると終了コード 1。
- * 枠を広げて作り直したとき、文字の大きさを変えずにどれだけ枠を埋められるかも記録する。
+ * 何も変えずに作り直すと新規挿入と同じ図になること、枠の大きさを変えると図形は枠に伸び文字は歪まないことも確かめる。
  * 図形の色が CSS だけで付いているか（PowerPoint 以外での表示に関係）は数を記録するだけで、失敗にはしない。
  * Chromium の場所は環境変数 CHROMIUM_PATH で指定できる。
  */
@@ -73,19 +73,42 @@ async function main() {
     }
   }
 
-  // 枠を広げて作り直したとき、文字の大きさを変えずにどれだけ枠を埋められるか（記録だけ）
-  const FILL_CASES = [
+  // 何も変えずに作り直すと、新規挿入と同じ図になること
+  for (const sample of samples) {
+    const r = await page.evaluate(([code]) => window.m4pRoundTrip(code), [sample.code]);
+    if (!r.ok) failures.push(`${sample.id} / 作り直し: ${r.error}`);
+    else if (!r.same) failures.push(`${sample.id}: 何も変えずに作り直すと、新規挿入した図と変わる\n    ${r.diff.join("\n    ")}`);
+  }
+
+  // 文字の大きさを変えて作り直すと、図形はそのままで文字だけ変わること
+  for (const sample of samples) {
+    for (const toPt of [10, 24]) {
+      const r = await page.evaluate(([code, pt]) => window.m4pFontChange(code, pt), [sample.code, toPt]);
+      if (!r.ok) failures.push(`${sample.id} / 文字 ${toPt}pt: ${r.error}`);
+      else if (!r.sameShapes) failures.push(`${sample.id} / 文字 ${toPt}pt: 図形の大きさが変わった`);
+      else if (Math.abs(r.textScale / (toPt / 14) - 1) > 0.06)
+        failures.push(`${sample.id} / 文字 ${toPt}pt: 文字の倍率 ${r.textScale.toFixed(3)}（期待 ${(toPt / 14).toFixed(3)}）`);
+    }
+  }
+
+  // 枠の大きさを変えて作り直したとき、図形は枠に伸び、文字は歪まず指定の大きさ（枠が小さければ縮めた大きさ）になること
+  const STRETCH_CASES = [
     { label: "幅2倍", w: 2, h: 1 },
     { label: "高さ2倍", w: 1, h: 2 },
     { label: "幅高さ2倍", w: 2, h: 2 },
     { label: "0.7倍", w: 0.7, h: 0.7 },
+    { label: "幅0.5倍", w: 0.5, h: 1.5 },
   ];
-  const fills = [];
+  const stretches = [];
   for (const sample of samples) {
-    for (const c of FILL_CASES) {
-      const r = await page.evaluate(([code, w, h]) => window.m4pFill(code, w, h), [sample.code, c.w, c.h]);
-      fills.push({ sample: sample.id, case: c.label, ...r });
+    for (const c of STRETCH_CASES) {
+      const r = await page.evaluate(([code, w, h]) => window.m4pStretch(code, w, h), [sample.code, c.w, c.h]);
+      stretches.push({ sample: sample.id, case: c.label, ...r });
       if (!r.ok) failures.push(`${sample.id} / ${c.label}: ${r.error}`);
+      else if (Math.abs(r.textScale / r.expected - 1) > 0.06)
+        failures.push(`${sample.id} / ${c.label}: 文字の倍率 ${r.textScale.toFixed(3)}（期待 ${r.expected}）`);
+      else if (r.fillW < 0.95 || r.fillH < 0.95 || r.fillW > 1.05 || r.fillH > 1.05)
+        failures.push(`${sample.id} / ${c.label}: 図が枠に合っていない（幅 ${r.fillW.toFixed(2)}・高さ ${r.fillH.toFixed(2)}）`);
     }
   }
 
@@ -102,14 +125,14 @@ async function main() {
       `${r.theme.padEnd(10)} ${r.sample.padEnd(9)} ${String(r.ms).padStart(5)} ${String(r.bytes ?? "-").padStart(7)}  ${color}${r.ok ? "" : "  ERROR"}`,
     );
   }
-  console.log("\nsample     枠          幅を埋めた  高さを埋めた  文字の縮小");
+  console.log("\nsample     枠          幅を埋めた  高さを埋めた  文字の倍率（期待）");
   const pct = (v) => `${Math.round(v * 100)}%`.padStart(6);
-  for (const r of fills) {
-    const v = r.ok ? `${pct(r.fillW)}      ${pct(r.fillH)}        ${pct(r.shrink)}` : "ERROR";
+  for (const r of stretches) {
+    const v = r.ok ? `${pct(r.fillW)}      ${pct(r.fillH)}        ${pct(r.textScale)}（${pct(r.expected)}）` : "ERROR";
     console.log(`${r.sample.padEnd(10)} ${r.case.padEnd(10)} ${v}`);
   }
   if (process.argv[2])
-    fs.writeFileSync(process.argv[2], JSON.stringify({ results, fills, init: { ...init, svg: undefined } }, null, 2));
+    fs.writeFileSync(process.argv[2], JSON.stringify({ results, stretches, init: { ...init, svg: undefined } }, null, 2));
 
   if (failures.length > 0) {
     console.error(`\n失敗 ${failures.length} 件:\n` + failures.map((f) => "  " + f).join("\n"));
